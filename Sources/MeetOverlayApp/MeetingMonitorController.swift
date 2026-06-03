@@ -1,0 +1,169 @@
+import AppKit
+import Foundation
+import MeetOverlayCore
+
+@MainActor
+final class MeetingMonitorController {
+    private let calendarEventSource: CalendarEventSource
+    private let overlayPresenter: OverlayPresenter
+    private let statusMenu: StatusMenuController
+    private let preferencesStore: AppPreferencesStore
+    private let selector = MeetingAlertSelector(alertLeadTime: 60)
+    private let menuPresenter = CalendarMenuPresenter()
+
+    private var timer: Timer?
+    private var isEnabled = true
+    private var hasCalendarAccess = false
+    private var visibleEventID: String?
+    private var suppressedEventIDs = Set<String>()
+
+    init(
+        calendarEventSource: CalendarEventSource,
+        overlayPresenter: OverlayPresenter,
+        statusMenu: StatusMenuController,
+        preferencesStore: AppPreferencesStore
+    ) {
+        self.calendarEventSource = calendarEventSource
+        self.overlayPresenter = overlayPresenter
+        self.statusMenu = statusMenu
+        self.preferencesStore = preferencesStore
+        self.isEnabled = preferencesStore.load().isOverlayEnabled
+
+        statusMenu.onOpenCalendarSettings = {
+            guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func start() {
+        statusMenu.update(status: "Requesting Calendar access", isEnabled: isEnabled)
+
+        calendarEventSource.requestAccess { [weak self] granted in
+            guard let self else { return }
+
+            self.hasCalendarAccess = granted
+
+            if granted {
+                self.statusMenu.update(status: "Watching for meetings", isEnabled: self.isEnabled)
+                self.startTimer()
+                self.checkNow()
+            } else {
+                self.statusMenu.update(status: "Calendar access denied", isEnabled: self.isEnabled)
+            }
+        }
+    }
+
+    func refreshFromPreferences() {
+        isEnabled = preferencesStore.load().isOverlayEnabled
+        checkNow()
+    }
+
+    private func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkNow()
+            }
+        }
+    }
+
+    private func checkNow() {
+        guard hasCalendarAccess else {
+            statusMenu.update(
+                status: "Calendar access needed",
+                isEnabled: isEnabled,
+                emptyMessage: "Allow Calendar access in System Settings",
+                showsCalendarSettingsAction: true
+            )
+            return
+        }
+
+        let now = Date()
+        let preferences = preferencesStore.load()
+        isEnabled = preferences.isOverlayEnabled
+        let events = eventsForMenu(now: now, preferences: preferences)
+        let sections = menuPresenter.sections(
+            now: now,
+            events: events,
+            hideFinishedEvents: preferences.hidesFinishedEvents
+        )
+        let menuBarTitle = menuPresenter.menuBarTitle(now: now, events: events)
+        let emptyMessage = emptyMessage(for: preferences)
+
+        guard isEnabled else {
+            visibleEventID = nil
+            overlayPresenter.hide()
+            statusMenu.update(
+                status: "Fullscreen alerts off",
+                isEnabled: isEnabled,
+                menuBarTitle: menuBarTitle,
+                sections: sections,
+                emptyMessage: emptyMessage
+            )
+            return
+        }
+
+        let meeting = selector.meetingToShow(now: now, events: events, suppressedEventIDs: suppressedEventIDs)
+
+        guard let meeting else {
+            visibleEventID = nil
+            overlayPresenter.hide()
+            statusMenu.update(
+                status: "No meeting soon",
+                isEnabled: isEnabled,
+                menuBarTitle: menuBarTitle,
+                sections: sections,
+                emptyMessage: emptyMessage
+            )
+            return
+        }
+
+        statusMenu.update(
+            status: "Upcoming: \(meeting.title)",
+            isEnabled: isEnabled,
+            menuBarTitle: menuBarTitle,
+            sections: sections,
+            emptyMessage: emptyMessage
+        )
+
+        guard visibleEventID != meeting.eventID else {
+            return
+        }
+
+        visibleEventID = meeting.eventID
+        overlayPresenter.show(
+            meeting: meeting,
+            onJoin: { [weak self] in
+                NSWorkspace.shared.open(meeting.meetURL)
+                self?.suppressVisibleMeeting(meeting.eventID)
+            },
+            onDismiss: { [weak self] in
+                self?.suppressVisibleMeeting(meeting.eventID)
+            }
+        )
+    }
+
+    private func eventsForMenu(now: Date, preferences: AppPreferences) -> [CalendarEventSnapshot] {
+        let calendar = Calendar.current
+        let startDate = calendar.startOfDay(for: now)
+        let endDate = calendar.date(byAdding: .day, value: 2, to: startDate) ?? now.addingTimeInterval(48 * 60 * 60)
+        let events = calendarEventSource.events(from: startDate, to: endDate)
+
+        return CalendarEventFilter.events(events, selectedCalendarIDs: preferences.selectedCalendarIDs)
+    }
+
+    private func emptyMessage(for preferences: AppPreferences) -> String {
+        if preferences.selectedCalendarIDs == [] {
+            return "No calendars selected. Open Settings to choose calendars."
+        }
+
+        return "No selected-calendar events today or tomorrow"
+    }
+
+    private func suppressVisibleMeeting(_ eventID: String) {
+        suppressedEventIDs.insert(eventID)
+        visibleEventID = nil
+        overlayPresenter.hide()
+        checkNow()
+    }
+}

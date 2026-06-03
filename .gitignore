@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+.swiftpm/xcode/
+
+# Local environment and signing overrides
+.env
+.env.*
+*.p12
+*.mobileprovision
