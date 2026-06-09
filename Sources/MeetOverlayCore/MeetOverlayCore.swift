@@ -1,21 +1,52 @@
 import Foundation
 
+public enum AlertLeadTimeUnit: String, Codable, CaseIterable, Equatable {
+    case minutes
+    case seconds
+
+    public func toSeconds(_ value: Double) -> TimeInterval {
+        switch self {
+        case .minutes: return value * 60
+        case .seconds: return value
+        }
+    }
+
+    public func fromSeconds(_ seconds: TimeInterval) -> Double {
+        switch self {
+        case .minutes: return seconds / 60
+        case .seconds: return seconds
+        }
+    }
+}
+
 public struct AppPreferences: Codable, Equatable {
     public var selectedCalendarIDs: Set<String>?
     public var isOverlayEnabled: Bool
     public var launchAtLogin: Bool
     public var hidesFinishedEvents: Bool
+    public var alertLeadTime: TimeInterval
+    public var alertLeadTimeUnit: AlertLeadTimeUnit
+    public var isSnoozeEnabled: Bool
+    public var snoozeOptions: [TimeInterval]
 
     public init(
         selectedCalendarIDs: Set<String>? = nil,
         isOverlayEnabled: Bool = true,
         launchAtLogin: Bool = false,
-        hidesFinishedEvents: Bool = true
+        hidesFinishedEvents: Bool = true,
+        alertLeadTime: TimeInterval = 900,
+        alertLeadTimeUnit: AlertLeadTimeUnit = .minutes,
+        isSnoozeEnabled: Bool = true,
+        snoozeOptions: [TimeInterval] = [60, 120, 300, 600, 900]
     ) {
         self.selectedCalendarIDs = selectedCalendarIDs
         self.isOverlayEnabled = isOverlayEnabled
         self.launchAtLogin = launchAtLogin
         self.hidesFinishedEvents = hidesFinishedEvents
+        self.alertLeadTime = alertLeadTime
+        self.alertLeadTimeUnit = alertLeadTimeUnit
+        self.isSnoozeEnabled = isSnoozeEnabled
+        self.snoozeOptions = snoozeOptions
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -23,6 +54,10 @@ public struct AppPreferences: Codable, Equatable {
         case isOverlayEnabled
         case launchAtLogin
         case hidesFinishedEvents
+        case alertLeadTime
+        case alertLeadTimeUnit
+        case isSnoozeEnabled
+        case snoozeOptions
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,6 +66,10 @@ public struct AppPreferences: Codable, Equatable {
         isOverlayEnabled = try container.decodeIfPresent(Bool.self, forKey: .isOverlayEnabled) ?? true
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         hidesFinishedEvents = try container.decodeIfPresent(Bool.self, forKey: .hidesFinishedEvents) ?? true
+        alertLeadTime = try container.decodeIfPresent(TimeInterval.self, forKey: .alertLeadTime) ?? 900
+        alertLeadTimeUnit = try container.decodeIfPresent(AlertLeadTimeUnit.self, forKey: .alertLeadTimeUnit) ?? .minutes
+        isSnoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSnoozeEnabled) ?? true
+        snoozeOptions = try container.decodeIfPresent([TimeInterval].self, forKey: .snoozeOptions) ?? [60, 120, 300, 600, 900]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -39,6 +78,10 @@ public struct AppPreferences: Codable, Equatable {
         try container.encode(isOverlayEnabled, forKey: .isOverlayEnabled)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(hidesFinishedEvents, forKey: .hidesFinishedEvents)
+        try container.encode(alertLeadTime, forKey: .alertLeadTime)
+        try container.encode(alertLeadTimeUnit, forKey: .alertLeadTimeUnit)
+        try container.encode(isSnoozeEnabled, forKey: .isSnoozeEnabled)
+        try container.encode(snoozeOptions, forKey: .snoozeOptions)
     }
 }
 

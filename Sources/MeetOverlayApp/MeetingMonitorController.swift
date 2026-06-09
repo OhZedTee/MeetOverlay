@@ -8,7 +8,6 @@ final class MeetingMonitorController {
     private let overlayPresenter: OverlayPresenter
     private let statusMenu: StatusMenuController
     private let preferencesStore: AppPreferencesStore
-    private let selector = MeetingAlertSelector(alertLeadTime: 60)
     private let menuPresenter = CalendarMenuPresenter()
 
     private var timer: Timer?
@@ -16,6 +15,7 @@ final class MeetingMonitorController {
     private var hasCalendarAccess = false
     private var visibleEventID: String?
     private var suppressedEventIDs = Set<String>()
+    private var snoozedUntil: [String: Date] = [:]
 
     init(
         calendarEventSource: CalendarEventSource,
@@ -103,7 +103,9 @@ final class MeetingMonitorController {
             return
         }
 
-        let meeting = selector.meetingToShow(now: now, events: events, suppressedEventIDs: suppressedEventIDs)
+        let activelySnoozed = Set(snoozedUntil.filter { $0.value > now }.keys)
+        let selector = MeetingAlertSelector(alertLeadTime: preferences.alertLeadTime)
+        let meeting = selector.meetingToShow(now: now, events: events, suppressedEventIDs: suppressedEventIDs.union(activelySnoozed))
 
         guard let meeting else {
             visibleEventID = nil
@@ -139,7 +141,11 @@ final class MeetingMonitorController {
             },
             onDismiss: { [weak self] in
                 self?.suppressVisibleMeeting(meeting.eventID)
-            }
+            },
+            onSnooze: { [weak self] duration in
+                self?.snoozeVisibleMeeting(meeting.eventID, duration: duration)
+            },
+            snoozeOptions: preferences.isSnoozeEnabled ? preferences.snoozeOptions.sorted() : []
         )
     }
 
@@ -162,6 +168,13 @@ final class MeetingMonitorController {
 
     private func suppressVisibleMeeting(_ eventID: String) {
         suppressedEventIDs.insert(eventID)
+        visibleEventID = nil
+        overlayPresenter.hide()
+        checkNow()
+    }
+
+    private func snoozeVisibleMeeting(_ eventID: String, duration: TimeInterval) {
+        snoozedUntil[eventID] = Date().addingTimeInterval(duration)
         visibleEventID = nil
         overlayPresenter.hide()
         checkNow()
