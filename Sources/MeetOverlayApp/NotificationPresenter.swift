@@ -12,6 +12,7 @@ private enum NotificationIdentifier {
 @MainActor
 final class NotificationPresenter: NSObject {
     var onJoin: ((String, URL) -> Void)?
+    var onSnooze: ((String, TimeInterval) -> Void)?
 
     // UNUserNotificationCenter aborts when the process is not a real .app bundle
     // (e.g. `swift run`), so notifications become a no-op there.
@@ -23,19 +24,36 @@ final class NotificationPresenter: NSObject {
 
         guard let center else { return }
 
-        let joinAction = UNNotificationAction(
-            identifier: NotificationIdentifier.joinAction,
-            title: "Join Meeting",
-            options: [.foreground]
-        )
+        registerCategory(snoozeOptions: [])
+        center.delegate = self
+    }
+
+    private func registerCategory(snoozeOptions: [TimeInterval]) {
+        guard let center else { return }
+
+        var actions = [
+            UNNotificationAction(
+                identifier: NotificationIdentifier.joinAction,
+                title: "Join Meeting",
+                options: [.foreground]
+            )
+        ]
+
+        for duration in snoozeOptions {
+            actions.append(UNNotificationAction(
+                identifier: SnoozeNotificationAction.identifier(for: duration),
+                title: "Snooze \(SnoozeDurationFormatter.label(duration))",
+                options: []
+            ))
+        }
+
         let category = UNNotificationCategory(
             identifier: NotificationIdentifier.category,
-            actions: [joinAction],
+            actions: actions,
             intentIdentifiers: [],
             options: []
         )
         center.setNotificationCategories([category])
-        center.delegate = self
     }
 
     func requestAuthorization() async -> Bool {
@@ -48,8 +66,12 @@ final class NotificationPresenter: NSObject {
         return await center.notificationSettings().authorizationStatus == .denied
     }
 
-    func showReminder(for meeting: JoinableMeeting, roomName: String?, now: Date) {
+    func showReminder(for meeting: JoinableMeeting, roomName: String?, snoozeOptions: [TimeInterval], now: Date) {
         guard let center else { return }
+
+        // Categories are app-global, so refresh the action list to match the
+        // currently configured snooze options before each delivery.
+        registerCategory(snoozeOptions: snoozeOptions)
 
         let composed = MeetingNotificationComposer.content(
             meetingTitle: meeting.title,
@@ -79,8 +101,14 @@ final class NotificationPresenter: NSObject {
     }
 
     private func handleResponse(actionID: String, eventID: String?, urlString: String?) {
+        guard let eventID else { return }
+
+        if let duration = SnoozeNotificationAction.duration(fromIdentifier: actionID) {
+            onSnooze?(eventID, duration)
+            return
+        }
+
         guard actionID == NotificationIdentifier.joinAction || actionID == UNNotificationDefaultActionIdentifier,
-              let eventID,
               let urlString,
               let url = URL(string: urlString) else {
             return

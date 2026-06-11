@@ -645,7 +645,7 @@ private struct SnoozeOptionsEditor: View {
             VStack(spacing: 0) {
                 ForEach(viewModel.snoozeOptions, id: \.self) { duration in
                     HStack {
-                        Text(snoozeLabel(duration))
+                        Text(SnoozeDurationFormatter.label(duration))
                             .font(.body)
                         Spacer()
                         Button {
@@ -708,15 +708,6 @@ private struct SnoozeOptionsEditor: View {
                     .stroke(MeetOverlayTheme.Palette.mutedBorder, lineWidth: 1)
             )
         }
-    }
-
-    private func snoozeLabel(_ duration: TimeInterval) -> String {
-        let secs = Int(duration)
-        if secs >= 60, secs % 60 == 0 {
-            let mins = secs / 60
-            return "\(mins) \(mins == 1 ? "minute" : "minutes")"
-        }
-        return "\(secs) \(secs == 1 ? "second" : "seconds")"
     }
 }
 
