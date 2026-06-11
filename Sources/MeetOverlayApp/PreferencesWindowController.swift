@@ -7,6 +7,7 @@ final class PreferencesWindowController {
     private let calendarEventSource: CalendarEventSource
     private let preferencesStore: AppPreferencesStore
     private let loginItemController: LoginItemController
+    private let notificationPresenter: NotificationPresenter
     private let onPreferencesChanged: () -> Void
 
     private var window: NSWindow?
@@ -16,11 +17,13 @@ final class PreferencesWindowController {
         calendarEventSource: CalendarEventSource,
         preferencesStore: AppPreferencesStore,
         loginItemController: LoginItemController,
+        notificationPresenter: NotificationPresenter,
         onPreferencesChanged: @escaping () -> Void
     ) {
         self.calendarEventSource = calendarEventSource
         self.preferencesStore = preferencesStore
         self.loginItemController = loginItemController
+        self.notificationPresenter = notificationPresenter
         self.onPreferencesChanged = onPreferencesChanged
     }
 
@@ -29,6 +32,7 @@ final class PreferencesWindowController {
             calendars: calendarEventSource.calendars(),
             preferencesStore: preferencesStore,
             loginItemController: loginItemController,
+            notificationPresenter: notificationPresenter,
             onPreferencesChanged: onPreferencesChanged
         )
         let contentView = SettingsView(viewModel: viewModel)
@@ -64,6 +68,8 @@ private final class PreferencesViewModel: ObservableObject {
 
     @Published var selectedCalendarIDs: Set<String>?
     @Published var isOverlayEnabled: Bool
+    @Published var isSystemNotificationEnabled: Bool
+    @Published var notificationPermissionDenied = false
     @Published var hidesFinishedEvents: Bool
     @Published var launchAtLogin: Bool
     @Published var alertLeadTime: TimeInterval
@@ -102,12 +108,14 @@ private final class PreferencesViewModel: ObservableObject {
 
     private let preferencesStore: AppPreferencesStore
     private let loginItemController: LoginItemController
+    private let notificationPresenter: NotificationPresenter
     private let onPreferencesChanged: () -> Void
 
     init(
         calendars: [CalendarSnapshot],
         preferencesStore: AppPreferencesStore,
         loginItemController: LoginItemController,
+        notificationPresenter: NotificationPresenter,
         onPreferencesChanged: @escaping () -> Void
     ) {
         let preferences = preferencesStore.load()
@@ -115,6 +123,7 @@ private final class PreferencesViewModel: ObservableObject {
         self.calendars = calendars
         self.selectedCalendarIDs = preferences.selectedCalendarIDs
         self.isOverlayEnabled = preferences.isOverlayEnabled
+        self.isSystemNotificationEnabled = preferences.isSystemNotificationEnabled
         self.hidesFinishedEvents = preferences.hidesFinishedEvents
         self.alertLeadTime = preferences.alertLeadTime
         self.alertLeadTimeUnit = preferences.alertLeadTimeUnit
@@ -127,7 +136,15 @@ private final class PreferencesViewModel: ObservableObject {
         self.loginItemStatus = loginItemController.statusText
         self.preferencesStore = preferencesStore
         self.loginItemController = loginItemController
+        self.notificationPresenter = notificationPresenter
         self.onPreferencesChanged = onPreferencesChanged
+
+        if preferences.isSystemNotificationEnabled {
+            Task { [weak self] in
+                let denied = await notificationPresenter.isAuthorizationDenied()
+                self?.notificationPermissionDenied = denied
+            }
+        }
     }
 
     func isCalendarSelected(_ calendarID: String) -> Bool {
@@ -137,6 +154,22 @@ private final class PreferencesViewModel: ObservableObject {
     func setOverlayEnabled(_ isEnabled: Bool) {
         isOverlayEnabled = isEnabled
         savePreferences()
+    }
+
+    func setSystemNotificationEnabled(_ isEnabled: Bool) {
+        isSystemNotificationEnabled = isEnabled
+        savePreferences()
+
+        guard isEnabled else {
+            notificationPermissionDenied = false
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            let granted = await self.notificationPresenter.requestAuthorization()
+            self.notificationPermissionDenied = !granted
+        }
     }
 
     func setHidesFinishedEvents(_ isEnabled: Bool) {
@@ -225,6 +258,7 @@ private final class PreferencesViewModel: ObservableObject {
         let preferences = AppPreferences(
             selectedCalendarIDs: selectedCalendarIDs,
             isOverlayEnabled: isOverlayEnabled,
+            isSystemNotificationEnabled: isSystemNotificationEnabled,
             launchAtLogin: launchAtLogin,
             hidesFinishedEvents: hidesFinishedEvents,
             alertLeadTime: alertLeadTime,
@@ -254,6 +288,7 @@ private struct SettingsView: View {
                 viewModel: viewModel,
                 launchAtLoginBinding: launchAtLoginBinding,
                 overlayBinding: overlayBinding,
+                systemNotificationBinding: systemNotificationBinding,
                 hidesFinishedEventsBinding: hidesFinishedEventsBinding,
                 alertLeadTimeValueBinding: alertLeadTimeValueBinding,
                 alertLeadTimeUnitBinding: alertLeadTimeUnitBinding,
@@ -281,6 +316,13 @@ private struct SettingsView: View {
         Binding(
             get: { viewModel.isOverlayEnabled },
             set: { viewModel.setOverlayEnabled($0) }
+        )
+    }
+
+    private var systemNotificationBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isSystemNotificationEnabled },
+            set: { viewModel.setSystemNotificationEnabled($0) }
         )
     }
 
@@ -345,6 +387,7 @@ private struct GeneralSettingsView: View {
     @ObservedObject var viewModel: PreferencesViewModel
     let launchAtLoginBinding: Binding<Bool>
     let overlayBinding: Binding<Bool>
+    let systemNotificationBinding: Binding<Bool>
     let hidesFinishedEventsBinding: Binding<Bool>
     let alertLeadTimeValueBinding: Binding<Double>
     let alertLeadTimeUnitBinding: Binding<AlertLeadTimeUnit>
@@ -352,6 +395,10 @@ private struct GeneralSettingsView: View {
     let meetingRoomCalloutBinding: Binding<Bool>
     let meetingRoomInAttendeesBinding: Binding<Bool>
     let meetingRoomPatternBinding: Binding<String>
+
+    private var anyReminderStyleEnabled: Bool {
+        viewModel.isOverlayEnabled || viewModel.isSystemNotificationEnabled
+    }
 
     var body: some View {
         ScrollView {
@@ -387,14 +434,22 @@ private struct GeneralSettingsView: View {
             SettingsCard(
                 systemImage: "bell.and.waves.left.and.right",
                 title: "Reminders",
-                description: "Fullscreen reminders appear only for joinable Google Meet events."
+                description: "Reminders appear only for joinable Google Meet events."
             ) {
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle("Show fullscreen reminders", isOn: overlayBinding)
 
+                    Toggle("Show system notifications", isOn: systemNotificationBinding)
+
+                    if viewModel.notificationPermissionDenied {
+                        Text("Notifications for MeetOverlay are turned off. Allow them in System Settings → Notifications.")
+                            .font(MeetOverlayTheme.Typography.helper.weight(.medium))
+                            .foregroundStyle(MeetOverlayTheme.Palette.attention)
+                    }
+
                     HStack(spacing: 8) {
                         Text("Alert me")
-                            .foregroundStyle(viewModel.isOverlayEnabled ? .primary : .secondary)
+                            .foregroundStyle(anyReminderStyleEnabled ? .primary : .secondary)
                         TextField("", value: alertLeadTimeValueBinding, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 64)
@@ -407,7 +462,7 @@ private struct GeneralSettingsView: View {
                         Text("before meeting")
                             .foregroundStyle(.secondary)
                     }
-                    .disabled(!viewModel.isOverlayEnabled)
+                    .disabled(!anyReminderStyleEnabled)
 
                     Divider()
 

@@ -6,6 +6,7 @@ import MeetOverlayCore
 final class MeetingMonitorController {
     private let calendarEventSource: CalendarEventSource
     private let overlayPresenter: OverlayPresenter
+    private let notificationPresenter: NotificationPresenter
     private let statusMenu: StatusMenuController
     private let preferencesStore: AppPreferencesStore
     private let menuPresenter = CalendarMenuPresenter()
@@ -16,15 +17,18 @@ final class MeetingMonitorController {
     private var visibleEventID: String?
     private var suppressedEventIDs = Set<String>()
     private var snoozedUntil: [String: Date] = [:]
+    private var notifiedEventIDs = Set<String>()
 
     init(
         calendarEventSource: CalendarEventSource,
         overlayPresenter: OverlayPresenter,
+        notificationPresenter: NotificationPresenter,
         statusMenu: StatusMenuController,
         preferencesStore: AppPreferencesStore
     ) {
         self.calendarEventSource = calendarEventSource
         self.overlayPresenter = overlayPresenter
+        self.notificationPresenter = notificationPresenter
         self.statusMenu = statusMenu
         self.preferencesStore = preferencesStore
         self.isEnabled = preferencesStore.load().isOverlayEnabled
@@ -32,6 +36,11 @@ final class MeetingMonitorController {
         statusMenu.onOpenCalendarSettings = {
             guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
             NSWorkspace.shared.open(url)
+        }
+
+        notificationPresenter.onJoin = { [weak self] eventID, url in
+            NSWorkspace.shared.open(url)
+            self?.suppressVisibleMeeting(eventID)
         }
     }
 
@@ -81,6 +90,7 @@ final class MeetingMonitorController {
         let now = Date()
         let preferences = preferencesStore.load()
         isEnabled = preferences.isOverlayEnabled
+        let notificationsEnabled = preferences.isSystemNotificationEnabled
         let events = eventsForMenu(now: now, preferences: preferences)
         let sections = menuPresenter.sections(
             now: now,
@@ -91,11 +101,11 @@ final class MeetingMonitorController {
         let menuBarTitle = menuPresenter.menuBarTitle(now: now, events: events)
         let emptyMessage = emptyMessage(for: preferences)
 
-        guard isEnabled else {
+        guard isEnabled || notificationsEnabled else {
             visibleEventID = nil
             overlayPresenter.hide()
             statusMenu.update(
-                status: "Fullscreen alerts off",
+                status: "Reminders off",
                 isEnabled: isEnabled,
                 menuBarTitle: menuBarTitle,
                 sections: sections,
@@ -129,16 +139,28 @@ final class MeetingMonitorController {
             emptyMessage: emptyMessage
         )
 
-        guard visibleEventID != meeting.eventID else {
-            return
-        }
-
-        visibleEventID = meeting.eventID
         let roomPresentation = MeetingRoomResolver.resolve(
             attendees: meeting.attendees,
             location: meeting.location,
             config: preferences.meetingRoomConfig
         )
+
+        if notificationsEnabled, !notifiedEventIDs.contains(meeting.eventID) {
+            notifiedEventIDs.insert(meeting.eventID)
+            notificationPresenter.showReminder(for: meeting, roomName: roomPresentation.roomName, now: now)
+        }
+
+        guard isEnabled else {
+            visibleEventID = nil
+            overlayPresenter.hide()
+            return
+        }
+
+        guard visibleEventID != meeting.eventID else {
+            return
+        }
+
+        visibleEventID = meeting.eventID
         overlayPresenter.show(
             meeting: meeting,
             onJoin: { [weak self] in
@@ -178,6 +200,7 @@ final class MeetingMonitorController {
         suppressedEventIDs.insert(eventID)
         visibleEventID = nil
         overlayPresenter.hide()
+        notificationPresenter.removeReminder(eventID: eventID)
         checkNow()
     }
 
@@ -185,6 +208,9 @@ final class MeetingMonitorController {
         snoozedUntil[eventID] = Date().addingTimeInterval(duration)
         visibleEventID = nil
         overlayPresenter.hide()
+        // A fresh notification should fire when the snooze expires.
+        notifiedEventIDs.remove(eventID)
+        notificationPresenter.removeReminder(eventID: eventID)
         checkNow()
     }
 }
