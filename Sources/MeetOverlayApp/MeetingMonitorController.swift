@@ -42,6 +42,10 @@ final class MeetingMonitorController {
             NSWorkspace.shared.open(url)
             self?.suppressVisibleMeeting(eventID)
         }
+
+        notificationPresenter.onSnooze = { [weak self] eventID, duration in
+            self?.snoozeVisibleMeeting(eventID, duration: duration)
+        }
     }
 
     func start() {
@@ -144,10 +148,16 @@ final class MeetingMonitorController {
             location: meeting.location,
             config: preferences.meetingRoomConfig
         )
+        let snoozeOptions = preferences.isSnoozeEnabled ? preferences.snoozeOptions.sorted() : []
 
         if notificationsEnabled, !notifiedEventIDs.contains(meeting.eventID) {
             notifiedEventIDs.insert(meeting.eventID)
-            notificationPresenter.showReminder(for: meeting, roomName: roomPresentation.roomName, now: now)
+            notificationPresenter.showReminder(
+                for: meeting,
+                roomName: roomPresentation.roomName,
+                snoozeOptions: snoozeOptions,
+                now: now
+            )
         }
 
         guard isEnabled else {
@@ -173,7 +183,7 @@ final class MeetingMonitorController {
             onSnooze: { [weak self] duration in
                 self?.snoozeVisibleMeeting(meeting.eventID, duration: duration)
             },
-            snoozeOptions: preferences.isSnoozeEnabled ? preferences.snoozeOptions.sorted() : [],
+            snoozeOptions: snoozeOptions,
             attendees: roomPresentation.attendees,
             roomName: roomPresentation.roomName
         )

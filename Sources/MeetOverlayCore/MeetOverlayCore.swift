@@ -19,6 +19,37 @@ public enum AlertLeadTimeUnit: String, Codable, CaseIterable, Equatable {
     }
 }
 
+public enum SnoozeDurationFormatter {
+    public static func label(_ duration: TimeInterval) -> String {
+        let secs = Int(duration)
+        if secs >= 60, secs % 60 == 0 {
+            let mins = secs / 60
+            return "\(mins) \(mins == 1 ? "minute" : "minutes")"
+        }
+        return "\(secs) \(secs == 1 ? "second" : "seconds")"
+    }
+}
+
+/// Encodes a snooze duration into a notification action identifier and back,
+/// since per-action payloads can only ride the identifier string.
+public enum SnoozeNotificationAction {
+    public static let identifierPrefix = "SNOOZE_ACTION:"
+
+    public static func identifier(for duration: TimeInterval) -> String {
+        "\(identifierPrefix)\(Int(duration.rounded()))"
+    }
+
+    public static func duration(fromIdentifier identifier: String) -> TimeInterval? {
+        guard identifier.hasPrefix(identifierPrefix),
+              let seconds = Int(identifier.dropFirst(identifierPrefix.count)),
+              seconds > 0 else {
+            return nil
+        }
+
+        return TimeInterval(seconds)
+    }
+}
+
 public struct AppPreferences: Codable, Equatable {
     public var selectedCalendarIDs: Set<String>?
     public var isOverlayEnabled: Bool
