@@ -7,7 +7,7 @@ final class OverlayPresenter {
     private var windows: [NSWindow] = []
     private var notificationSound: NSSound?
 
-    func show(meeting: JoinableMeeting, onJoin: @escaping () -> Void, onDismiss: @escaping () -> Void, onSnooze: @escaping (TimeInterval) -> Void, snoozeOptions: [TimeInterval]) {
+    func show(meeting: JoinableMeeting, onJoin: @escaping () -> Void, onDismiss: @escaping () -> Void, onSnooze: @escaping (TimeInterval) -> Void, snoozeOptions: [TimeInterval], attendees: [String], roomName: String?) {
         hide()
         playNotificationSound()
 
@@ -31,7 +31,9 @@ final class OverlayPresenter {
                     onJoin: onJoin,
                     onDismiss: onDismiss,
                     onSnooze: onSnooze,
-                    snoozeOptions: snoozeOptions
+                    snoozeOptions: snoozeOptions,
+                    attendees: attendees,
+                    roomName: roomName
                 )
             )
 
@@ -87,6 +89,8 @@ private struct MeetingOverlayView: View {
     let onDismiss: () -> Void
     let onSnooze: (TimeInterval) -> Void
     let snoozeOptions: [TimeInterval]
+    let attendees: [String]
+    let roomName: String?
 
     var body: some View {
         ZStack {
@@ -148,6 +152,41 @@ private struct MeetingOverlayView: View {
                     Capsule()
                         .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
                 )
+
+                if let roomName {
+                    Label(roomName, systemImage: "door.left.hand.open")
+                        .font(MeetOverlayTheme.Typography.overlayMetadata)
+                        .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(MeetOverlayTheme.Palette.overlayPanel)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+                        )
+                }
+
+                if !attendees.isEmpty {
+                    VStack(spacing: 6) {
+                        Label(
+                            "\(attendees.count) \(attendees.count == 1 ? "Attendee" : "Attendees")",
+                            systemImage: "person.2"
+                        )
+                        .font(MeetOverlayTheme.Typography.overlayMetadata)
+                        .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+
+                        Text(attendees.joined(separator: ", "))
+                            .font(MeetOverlayTheme.Typography.overlayHint)
+                            .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 760)
+                    }
+                }
 
                 HStack(spacing: 14) {
                     Button(action: onJoin) {

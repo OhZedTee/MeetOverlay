@@ -16,6 +16,9 @@ final class AppPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(preferences.alertLeadTimeUnit, .minutes)
         XCTAssertTrue(preferences.isSnoozeEnabled)
         XCTAssertEqual(preferences.snoozeOptions, [60, 120, 300, 600, 900])
+        XCTAssertFalse(preferences.isMeetingRoomCalloutEnabled)
+        XCTAssertTrue(preferences.isMeetingRoomInAttendees)
+        XCTAssertEqual(preferences.meetingRoomPattern, "")
     }
 
     func testPersistsPreferences() throws {
@@ -29,7 +32,10 @@ final class AppPreferencesStoreTests: XCTestCase {
             alertLeadTime: 300,
             alertLeadTimeUnit: .seconds,
             isSnoozeEnabled: false,
-            snoozeOptions: [30, 60]
+            snoozeOptions: [30, 60],
+            isMeetingRoomCalloutEnabled: true,
+            isMeetingRoomInAttendees: false,
+            meetingRoomPattern: "MTL-*"
         )
 
         store.save(savedPreferences)
@@ -58,6 +64,39 @@ final class AppPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(preferences.alertLeadTimeUnit, .minutes, "Old saved data missing alertLeadTimeUnit should default to minutes")
         XCTAssertTrue(preferences.isSnoozeEnabled, "Old saved data missing isSnoozeEnabled should default to true")
         XCTAssertEqual(preferences.snoozeOptions, [60, 120, 300, 600, 900], "Old saved data missing snoozeOptions should use defaults")
+        XCTAssertFalse(preferences.isMeetingRoomCalloutEnabled, "Old saved data missing room callout flag should default to off")
+        XCTAssertTrue(preferences.isMeetingRoomInAttendees, "Old saved data missing room-in-attendees flag should default to true")
+        XCTAssertEqual(preferences.meetingRoomPattern, "", "Old saved data missing room pattern should default to empty")
+    }
+
+    func testMeetingRoomConfigMirrorsPreferenceFields() throws {
+        let preferences = AppPreferences(
+            isMeetingRoomCalloutEnabled: true,
+            isMeetingRoomInAttendees: false,
+            meetingRoomPattern: "MTL-*"
+        )
+
+        let config = preferences.meetingRoomConfig
+
+        XCTAssertTrue(config.isEnabled)
+        XCTAssertFalse(config.isRoomInAttendees)
+        XCTAssertEqual(config.pattern, "MTL-*")
+    }
+
+    func testPersistsMeetingRoomSettings() throws {
+        let defaults = makeDefaults()
+        let store = AppPreferencesStore(defaults: defaults)
+
+        store.save(AppPreferences(
+            isMeetingRoomCalloutEnabled: true,
+            isMeetingRoomInAttendees: true,
+            meetingRoomPattern: "Room-?-*"
+        ))
+
+        let loaded = store.load()
+        XCTAssertTrue(loaded.isMeetingRoomCalloutEnabled)
+        XCTAssertTrue(loaded.isMeetingRoomInAttendees)
+        XCTAssertEqual(loaded.meetingRoomPattern, "Room-?-*")
     }
 
     func testPersistsAlertLeadTime() throws {

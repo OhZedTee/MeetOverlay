@@ -85,7 +85,8 @@ final class MeetingMonitorController {
         let sections = menuPresenter.sections(
             now: now,
             events: events,
-            hideFinishedEvents: preferences.hidesFinishedEvents
+            hideFinishedEvents: preferences.hidesFinishedEvents,
+            roomConfig: preferences.meetingRoomConfig
         )
         let menuBarTitle = menuPresenter.menuBarTitle(now: now, events: events)
         let emptyMessage = emptyMessage(for: preferences)
@@ -133,6 +134,11 @@ final class MeetingMonitorController {
         }
 
         visibleEventID = meeting.eventID
+        let roomPresentation = MeetingRoomResolver.resolve(
+            attendees: meeting.attendees,
+            location: meeting.location,
+            config: preferences.meetingRoomConfig
+        )
         overlayPresenter.show(
             meeting: meeting,
             onJoin: { [weak self] in
@@ -145,7 +151,9 @@ final class MeetingMonitorController {
             onSnooze: { [weak self] duration in
                 self?.snoozeVisibleMeeting(meeting.eventID, duration: duration)
             },
-            snoozeOptions: preferences.isSnoozeEnabled ? preferences.snoozeOptions.sorted() : []
+            snoozeOptions: preferences.isSnoozeEnabled ? preferences.snoozeOptions.sorted() : [],
+            attendees: roomPresentation.attendees,
+            roomName: roomPresentation.roomName
         )
     }
 
