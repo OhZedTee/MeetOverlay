@@ -303,6 +303,7 @@ public struct JoinableMeeting: Equatable {
     public let startDate: Date
     public let endDate: Date
     public let meetURL: URL
+    public let platform: VideoCallPlatform
     public let attendees: [String]
     public let location: String?
 }
@@ -332,14 +333,15 @@ public struct MeetingAlertSelector {
                 guard !suppressedEventIDs.contains(event.id) else { return nil }
 
                 let candidates = [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 }
-                guard let meetURL = GoogleMeetLinkFinder.firstLink(in: candidates) else { return nil }
+                guard let link = VideoCallLinkFinder.firstLink(in: candidates) else { return nil }
 
                 return JoinableMeeting(
                     eventID: event.id,
                     title: event.title,
                     startDate: event.startDate,
                     endDate: event.endDate,
-                    meetURL: meetURL,
+                    meetURL: link.url,
+                    platform: link.platform,
                     attendees: event.attendees,
                     location: event.location
                 )
@@ -359,6 +361,7 @@ public struct CalendarMenuRow: Equatable {
     public let timeText: String
     public let hasMeetLink: Bool
     public let meetURL: URL?
+    public let platform: VideoCallPlatform?
     public let attendees: [String]
     public let roomName: String?
 }
@@ -440,7 +443,7 @@ public struct CalendarMenuPresenter {
     }
 
     private func row(for event: CalendarEventSnapshot, roomConfig: MeetingRoomConfig) -> CalendarMenuRow {
-        let meetURL = GoogleMeetLinkFinder.firstLink(in: [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 })
+        let link = VideoCallLinkFinder.firstLink(in: [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 })
         let roomPresentation = MeetingRoomResolver.resolve(
             attendees: event.attendees,
             location: event.location,
@@ -451,8 +454,9 @@ public struct CalendarMenuPresenter {
             eventID: event.id,
             title: event.title,
             timeText: event.isAllDay ? "All-day" : timeFormatter.string(from: event.startDate),
-            hasMeetLink: meetURL != nil,
-            meetURL: meetURL,
+            hasMeetLink: link != nil,
+            meetURL: link?.url,
+            platform: link?.platform,
             attendees: roomPresentation.attendees,
             roomName: roomPresentation.roomName
         )
@@ -510,8 +514,34 @@ public enum MeetingNotificationComposer {
     }
 }
 
-public enum GoogleMeetLinkFinder {
-    public static func firstLink(in candidates: [String]) -> URL? {
+public enum VideoCallPlatform: String, CaseIterable, Equatable, Sendable {
+    case googleMeet
+    case zoom
+    case microsoftTeams
+    case webex
+
+    public var displayName: String {
+        switch self {
+        case .googleMeet: return "Google Meet"
+        case .zoom: return "Zoom"
+        case .microsoftTeams: return "Microsoft Teams"
+        case .webex: return "Webex"
+        }
+    }
+}
+
+public struct VideoCallLink: Equatable {
+    public let url: URL
+    public let platform: VideoCallPlatform
+
+    public init(url: URL, platform: VideoCallPlatform) {
+        self.url = url
+        self.platform = platform
+    }
+}
+
+public enum VideoCallLinkFinder {
+    public static func firstLink(in candidates: [String]) -> VideoCallLink? {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
             return nil
         }
@@ -521,19 +551,36 @@ public enum GoogleMeetLinkFinder {
             let matches = detector.matches(in: candidate, options: [], range: range)
 
             for match in matches {
-                guard let url = match.url, isGoogleMeetURL(url) else { continue }
-                return url
+                guard let url = match.url, let platform = platform(for: url) else { continue }
+                return VideoCallLink(url: url, platform: platform)
             }
         }
 
         return nil
     }
 
-    private static func isGoogleMeetURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
-            return false
+    public static func platform(for url: URL) -> VideoCallPlatform? {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = url.host?.lowercased() else {
+            return nil
         }
 
-        return url.host?.lowercased() == "meet.google.com"
+        if host == "meet.google.com" {
+            return .googleMeet
+        }
+
+        if host == "zoom.us" || host.hasSuffix(".zoom.us") {
+            return .zoom
+        }
+
+        if host == "teams.microsoft.com" || host == "teams.live.com" {
+            return .microsoftTeams
+        }
+
+        if host == "webex.com" || host.hasSuffix(".webex.com") {
+            return .webex
+        }
+
+        return nil
     }
 }

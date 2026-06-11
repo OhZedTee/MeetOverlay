@@ -16,6 +16,28 @@ final class MeetingAlertSelectorTests: XCTestCase {
 
         XCTAssertEqual(selectedMeeting?.eventID, "event-1")
         XCTAssertEqual(selectedMeeting?.meetURL.absoluteString, "https://meet.google.com/abc-defg-hij")
+        XCTAssertEqual(selectedMeeting?.platform, .googleMeet)
+    }
+
+    func testShowsZoomMeetingWithItsPlatform() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = CalendarEventSnapshot(
+            id: "event-1",
+            title: "Zoom planning",
+            startDate: now.addingTimeInterval(60),
+            endDate: now.addingTimeInterval(3_600),
+            isAllDay: false,
+            participationStatus: .accepted,
+            url: nil,
+            notes: "Join: https://us02web.zoom.us/j/123456789",
+            location: nil
+        )
+
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: [])
+
+        XCTAssertEqual(selectedMeeting?.meetURL.absoluteString, "https://us02web.zoom.us/j/123456789")
+        XCTAssertEqual(selectedMeeting?.platform, .zoom)
     }
 
     func testDoesNotShowDeclinedEvent() throws {

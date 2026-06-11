@@ -76,7 +76,7 @@ final class StatusMenuController: NSObject {
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.image = NSImage(
                 systemSymbolName: row.hasMeetLink ? "video.fill" : "calendar",
-                accessibilityDescription: row.hasMeetLink ? "Google Meet link" : "Calendar event"
+                accessibilityDescription: row.platform.map { "\($0.displayName) link" } ?? "Calendar event"
             )
 
             if let submenu = detailSubmenu(for: row) {
@@ -102,10 +102,11 @@ final class StatusMenuController: NSObject {
         let submenu = NSMenu()
 
         if let meetURL = row.meetURL {
-            let joinItem = NSMenuItem(title: "Join Meeting", action: #selector(openMeetLink), keyEquivalent: "")
+            let joinTitle = row.platform.map { "Join \($0.displayName)" } ?? "Join Meeting"
+            let joinItem = NSMenuItem(title: joinTitle, action: #selector(openMeetLink), keyEquivalent: "")
             joinItem.target = self
             joinItem.representedObject = meetURL
-            joinItem.image = NSImage(systemSymbolName: "video.fill", accessibilityDescription: "Google Meet link")
+            joinItem.image = NSImage(systemSymbolName: "video.fill", accessibilityDescription: joinTitle)
             submenu.addItem(joinItem)
             submenu.addItem(.separator())
         }
