@@ -22,6 +22,7 @@ public enum AlertLeadTimeUnit: String, Codable, CaseIterable, Equatable {
 public struct AppPreferences: Codable, Equatable {
     public var selectedCalendarIDs: Set<String>?
     public var isOverlayEnabled: Bool
+    public var isSystemNotificationEnabled: Bool
     public var launchAtLogin: Bool
     public var hidesFinishedEvents: Bool
     public var alertLeadTime: TimeInterval
@@ -43,6 +44,7 @@ public struct AppPreferences: Codable, Equatable {
     public init(
         selectedCalendarIDs: Set<String>? = nil,
         isOverlayEnabled: Bool = true,
+        isSystemNotificationEnabled: Bool = false,
         launchAtLogin: Bool = false,
         hidesFinishedEvents: Bool = true,
         alertLeadTime: TimeInterval = 900,
@@ -55,6 +57,7 @@ public struct AppPreferences: Codable, Equatable {
     ) {
         self.selectedCalendarIDs = selectedCalendarIDs
         self.isOverlayEnabled = isOverlayEnabled
+        self.isSystemNotificationEnabled = isSystemNotificationEnabled
         self.launchAtLogin = launchAtLogin
         self.hidesFinishedEvents = hidesFinishedEvents
         self.alertLeadTime = alertLeadTime
@@ -69,6 +72,7 @@ public struct AppPreferences: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case selectedCalendarIDs
         case isOverlayEnabled
+        case isSystemNotificationEnabled
         case launchAtLogin
         case hidesFinishedEvents
         case alertLeadTime
@@ -84,6 +88,7 @@ public struct AppPreferences: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         selectedCalendarIDs = try container.decodeIfPresent(Set<String>.self, forKey: .selectedCalendarIDs)
         isOverlayEnabled = try container.decodeIfPresent(Bool.self, forKey: .isOverlayEnabled) ?? true
+        isSystemNotificationEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSystemNotificationEnabled) ?? false
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         hidesFinishedEvents = try container.decodeIfPresent(Bool.self, forKey: .hidesFinishedEvents) ?? true
         alertLeadTime = try container.decodeIfPresent(TimeInterval.self, forKey: .alertLeadTime) ?? 900
@@ -99,6 +104,7 @@ public struct AppPreferences: Codable, Equatable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(selectedCalendarIDs, forKey: .selectedCalendarIDs)
         try container.encode(isOverlayEnabled, forKey: .isOverlayEnabled)
+        try container.encode(isSystemNotificationEnabled, forKey: .isSystemNotificationEnabled)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(hidesFinishedEvents, forKey: .hidesFinishedEvents)
         try container.encode(alertLeadTime, forKey: .alertLeadTime)
@@ -478,6 +484,29 @@ public enum MeetingCountdownFormatter {
 
         let minutes = Int(ceil(Double(seconds) / 60))
         return "Starts in \(minutes) \(minutes == 1 ? "minute" : "minutes")"
+    }
+}
+
+public struct MeetingNotificationContent: Equatable {
+    public let title: String
+    public let body: String
+
+    public init(title: String, body: String) {
+        self.title = title
+        self.body = body
+    }
+}
+
+public enum MeetingNotificationComposer {
+    public static func content(
+        meetingTitle: String,
+        startDate: Date,
+        roomName: String?,
+        now: Date
+    ) -> MeetingNotificationContent {
+        let countdown = MeetingCountdownFormatter.text(now: now, startDate: startDate)
+        let body = roomName.map { "\(countdown) · \($0)" } ?? countdown
+        return MeetingNotificationContent(title: meetingTitle, body: body)
     }
 }
 

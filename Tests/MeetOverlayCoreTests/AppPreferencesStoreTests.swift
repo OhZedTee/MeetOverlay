@@ -10,6 +10,7 @@ final class AppPreferencesStoreTests: XCTestCase {
 
         XCTAssertNil(preferences.selectedCalendarIDs)
         XCTAssertTrue(preferences.isOverlayEnabled)
+        XCTAssertFalse(preferences.isSystemNotificationEnabled)
         XCTAssertFalse(preferences.launchAtLogin)
         XCTAssertTrue(preferences.hidesFinishedEvents)
         XCTAssertEqual(preferences.alertLeadTime, 900)
@@ -27,6 +28,7 @@ final class AppPreferencesStoreTests: XCTestCase {
         let savedPreferences = AppPreferences(
             selectedCalendarIDs: ["work", "personal"],
             isOverlayEnabled: false,
+            isSystemNotificationEnabled: true,
             launchAtLogin: true,
             hidesFinishedEvents: false,
             alertLeadTime: 300,
@@ -58,6 +60,7 @@ final class AppPreferencesStoreTests: XCTestCase {
 
         XCTAssertEqual(preferences.selectedCalendarIDs, ["work"])
         XCTAssertFalse(preferences.isOverlayEnabled)
+        XCTAssertFalse(preferences.isSystemNotificationEnabled, "Old saved data missing isSystemNotificationEnabled should default to false")
         XCTAssertTrue(preferences.launchAtLogin)
         XCTAssertTrue(preferences.hidesFinishedEvents)
         XCTAssertEqual(preferences.alertLeadTime, 900, "Old saved data missing alertLeadTime should default to 15 minutes")
