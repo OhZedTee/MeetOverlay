@@ -473,6 +473,14 @@ private struct CalendarSettingsView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
     var body: some View {
+        ScrollView {
+            content
+                .padding(MeetOverlayTheme.Spacing.page)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsPageHeader(
                 title: "Calendars",
@@ -486,10 +494,7 @@ private struct CalendarSettingsView: View {
             ) {
                 CalendarSelectionView(viewModel: viewModel)
             }
-
-            Spacer()
         }
-        .padding(MeetOverlayTheme.Spacing.page)
     }
 }
 
