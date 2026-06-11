@@ -354,6 +354,14 @@ private struct GeneralSettingsView: View {
     let meetingRoomPatternBinding: Binding<String>
 
     var body: some View {
+        ScrollView {
+            content
+                .padding(MeetOverlayTheme.Spacing.page)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsPageHeader(
                 title: "General",
@@ -457,10 +465,7 @@ private struct GeneralSettingsView: View {
                     .font(MeetOverlayTheme.Typography.helper)
                     .foregroundStyle(MeetOverlayTheme.Palette.warning)
             }
-
-            Spacer()
         }
-        .padding(MeetOverlayTheme.Spacing.page)
     }
 }
 

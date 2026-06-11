@@ -69,6 +69,20 @@ final class AppPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(preferences.meetingRoomPattern, "", "Old saved data missing room pattern should default to empty")
     }
 
+    func testMeetingRoomConfigMirrorsPreferenceFields() throws {
+        let preferences = AppPreferences(
+            isMeetingRoomCalloutEnabled: true,
+            isMeetingRoomInAttendees: false,
+            meetingRoomPattern: "MTL-*"
+        )
+
+        let config = preferences.meetingRoomConfig
+
+        XCTAssertTrue(config.isEnabled)
+        XCTAssertFalse(config.isRoomInAttendees)
+        XCTAssertEqual(config.pattern, "MTL-*")
+    }
+
     func testPersistsMeetingRoomSettings() throws {
         let defaults = makeDefaults()
         let store = AppPreferencesStore(defaults: defaults)
