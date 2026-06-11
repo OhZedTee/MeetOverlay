@@ -96,6 +96,7 @@ final class MeetingMonitorController {
         isEnabled = preferences.isOverlayEnabled
         let notificationsEnabled = preferences.isSystemNotificationEnabled
         let events = eventsForMenu(now: now, preferences: preferences)
+        pruneTrackedEventIDs(keeping: Set(events.map(\.id)))
         let sections = menuPresenter.sections(
             now: now,
             events: events,
@@ -204,6 +205,16 @@ final class MeetingMonitorController {
         }
 
         return "No selected-calendar events today or tomorrow"
+    }
+
+    // The suppression/snooze/notified sets only matter for events still in the
+    // fetched window (today and tomorrow); dropping the rest keeps them from
+    // growing for the lifetime of the process.
+    private func pruneTrackedEventIDs(keeping currentEventIDs: Set<String>) {
+        guard !currentEventIDs.isEmpty else { return }
+        suppressedEventIDs.formIntersection(currentEventIDs)
+        notifiedEventIDs.formIntersection(currentEventIDs)
+        snoozedUntil = snoozedUntil.filter { currentEventIDs.contains($0.key) }
     }
 
     private func suppressVisibleMeeting(_ eventID: String) {

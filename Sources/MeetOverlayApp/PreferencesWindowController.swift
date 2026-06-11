@@ -178,7 +178,7 @@ private final class PreferencesViewModel: ObservableObject {
     }
 
     func setAlertLeadTimeDisplayValue(_ value: Double) {
-        alertLeadTime = alertLeadTimeUnit.toSeconds(max(1, value))
+        alertLeadTime = ReminderTimeLimits.clamped(alertLeadTimeUnit.toSeconds(max(1, value)))
         savePreferences()
     }
 
@@ -193,8 +193,9 @@ private final class PreferencesViewModel: ObservableObject {
     }
 
     func addSnoozeOption(_ duration: TimeInterval) {
-        guard duration > 0, !snoozeOptions.contains(duration) else { return }
-        snoozeOptions.append(duration)
+        let clamped = ReminderTimeLimits.clamped(duration)
+        guard !snoozeOptions.contains(clamped) else { return }
+        snoozeOptions.append(clamped)
         snoozeOptions.sort()
         savePreferences()
     }
