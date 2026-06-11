@@ -28,6 +28,17 @@ public struct AppPreferences: Codable, Equatable {
     public var alertLeadTimeUnit: AlertLeadTimeUnit
     public var isSnoozeEnabled: Bool
     public var snoozeOptions: [TimeInterval]
+    public var isMeetingRoomCalloutEnabled: Bool
+    public var isMeetingRoomInAttendees: Bool
+    public var meetingRoomPattern: String
+
+    public var meetingRoomConfig: MeetingRoomConfig {
+        MeetingRoomConfig(
+            isEnabled: isMeetingRoomCalloutEnabled,
+            isRoomInAttendees: isMeetingRoomInAttendees,
+            pattern: meetingRoomPattern
+        )
+    }
 
     public init(
         selectedCalendarIDs: Set<String>? = nil,
@@ -37,7 +48,10 @@ public struct AppPreferences: Codable, Equatable {
         alertLeadTime: TimeInterval = 900,
         alertLeadTimeUnit: AlertLeadTimeUnit = .minutes,
         isSnoozeEnabled: Bool = true,
-        snoozeOptions: [TimeInterval] = [60, 120, 300, 600, 900]
+        snoozeOptions: [TimeInterval] = [60, 120, 300, 600, 900],
+        isMeetingRoomCalloutEnabled: Bool = false,
+        isMeetingRoomInAttendees: Bool = true,
+        meetingRoomPattern: String = ""
     ) {
         self.selectedCalendarIDs = selectedCalendarIDs
         self.isOverlayEnabled = isOverlayEnabled
@@ -47,6 +61,9 @@ public struct AppPreferences: Codable, Equatable {
         self.alertLeadTimeUnit = alertLeadTimeUnit
         self.isSnoozeEnabled = isSnoozeEnabled
         self.snoozeOptions = snoozeOptions
+        self.isMeetingRoomCalloutEnabled = isMeetingRoomCalloutEnabled
+        self.isMeetingRoomInAttendees = isMeetingRoomInAttendees
+        self.meetingRoomPattern = meetingRoomPattern
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -58,6 +75,9 @@ public struct AppPreferences: Codable, Equatable {
         case alertLeadTimeUnit
         case isSnoozeEnabled
         case snoozeOptions
+        case isMeetingRoomCalloutEnabled
+        case isMeetingRoomInAttendees
+        case meetingRoomPattern
     }
 
     public init(from decoder: Decoder) throws {
@@ -70,6 +90,9 @@ public struct AppPreferences: Codable, Equatable {
         alertLeadTimeUnit = try container.decodeIfPresent(AlertLeadTimeUnit.self, forKey: .alertLeadTimeUnit) ?? .minutes
         isSnoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSnoozeEnabled) ?? true
         snoozeOptions = try container.decodeIfPresent([TimeInterval].self, forKey: .snoozeOptions) ?? [60, 120, 300, 600, 900]
+        isMeetingRoomCalloutEnabled = try container.decodeIfPresent(Bool.self, forKey: .isMeetingRoomCalloutEnabled) ?? false
+        isMeetingRoomInAttendees = try container.decodeIfPresent(Bool.self, forKey: .isMeetingRoomInAttendees) ?? true
+        meetingRoomPattern = try container.decodeIfPresent(String.self, forKey: .meetingRoomPattern) ?? ""
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -82,6 +105,68 @@ public struct AppPreferences: Codable, Equatable {
         try container.encode(alertLeadTimeUnit, forKey: .alertLeadTimeUnit)
         try container.encode(isSnoozeEnabled, forKey: .isSnoozeEnabled)
         try container.encode(snoozeOptions, forKey: .snoozeOptions)
+        try container.encode(isMeetingRoomCalloutEnabled, forKey: .isMeetingRoomCalloutEnabled)
+        try container.encode(isMeetingRoomInAttendees, forKey: .isMeetingRoomInAttendees)
+        try container.encode(meetingRoomPattern, forKey: .meetingRoomPattern)
+    }
+}
+
+public struct MeetingRoomConfig: Equatable, Sendable {
+    public let isEnabled: Bool
+    public let isRoomInAttendees: Bool
+    public let pattern: String
+
+    public static let disabled = MeetingRoomConfig(isEnabled: false, isRoomInAttendees: true, pattern: "")
+
+    public init(isEnabled: Bool, isRoomInAttendees: Bool, pattern: String) {
+        self.isEnabled = isEnabled
+        self.isRoomInAttendees = isRoomInAttendees
+        self.pattern = pattern
+    }
+}
+
+public struct MeetingRoomPresentation: Equatable {
+    public let roomName: String?
+    public let attendees: [String]
+
+    public init(roomName: String?, attendees: [String]) {
+        self.roomName = roomName
+        self.attendees = attendees
+    }
+}
+
+public enum MeetingRoomResolver {
+    public static func resolve(
+        attendees: [String],
+        location: String?,
+        config: MeetingRoomConfig
+    ) -> MeetingRoomPresentation {
+        guard config.isEnabled else {
+            return MeetingRoomPresentation(roomName: nil, attendees: attendees)
+        }
+
+        guard config.isRoomInAttendees else {
+            let trimmedLocation = location?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let roomName = (trimmedLocation?.isEmpty ?? true) ? nil : trimmedLocation
+            return MeetingRoomPresentation(roomName: roomName, attendees: attendees)
+        }
+
+        guard let roomName = firstMatch(in: attendees, pattern: config.pattern),
+              let roomIndex = attendees.firstIndex(of: roomName) else {
+            return MeetingRoomPresentation(roomName: nil, attendees: attendees)
+        }
+
+        var remainingAttendees = attendees
+        remainingAttendees.remove(at: roomIndex)
+        return MeetingRoomPresentation(roomName: roomName, attendees: remainingAttendees)
+    }
+
+    public static func firstMatch(in attendees: [String], pattern: String) -> String? {
+        let trimmedPattern = pattern.trimmingCharacters(in: .whitespaces)
+        guard !trimmedPattern.isEmpty else { return nil }
+
+        let predicate = NSPredicate(format: "SELF LIKE[c] %@", trimmedPattern)
+        return attendees.first { predicate.evaluate(with: $0) }
     }
 }
 
@@ -125,6 +210,7 @@ public struct CalendarEventSnapshot: Equatable {
     public let url: URL?
     public let notes: String?
     public let location: String?
+    public let attendees: [String]
 
     public init(
         id: String,
@@ -136,7 +222,8 @@ public struct CalendarEventSnapshot: Equatable {
         participationStatus: EventParticipationStatus,
         url: URL?,
         notes: String?,
-        location: String?
+        location: String?,
+        attendees: [String] = []
     ) {
         self.id = id
         self.calendarID = calendarID
@@ -148,6 +235,7 @@ public struct CalendarEventSnapshot: Equatable {
         self.url = url
         self.notes = notes
         self.location = location
+        self.attendees = attendees
     }
 }
 
@@ -209,6 +297,8 @@ public struct JoinableMeeting: Equatable {
     public let startDate: Date
     public let endDate: Date
     public let meetURL: URL
+    public let attendees: [String]
+    public let location: String?
 }
 
 public struct MeetingAlertSelector {
@@ -243,7 +333,9 @@ public struct MeetingAlertSelector {
                     title: event.title,
                     startDate: event.startDate,
                     endDate: event.endDate,
-                    meetURL: meetURL
+                    meetURL: meetURL,
+                    attendees: event.attendees,
+                    location: event.location
                 )
             }
             .first
@@ -261,6 +353,8 @@ public struct CalendarMenuRow: Equatable {
     public let timeText: String
     public let hasMeetLink: Bool
     public let meetURL: URL?
+    public let attendees: [String]
+    public let roomName: String?
 }
 
 public struct CalendarMenuPresenter {
@@ -283,14 +377,15 @@ public struct CalendarMenuPresenter {
     public func sections(
         now: Date,
         events: [CalendarEventSnapshot],
-        hideFinishedEvents: Bool = true
+        hideFinishedEvents: Bool = true,
+        roomConfig: MeetingRoomConfig = .disabled
     ) -> [CalendarMenuSection] {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
         let visibleEvents = hideFinishedEvents ? events.filter { $0.endDate > now } : events
 
         return [
-            section(title: "Today's Events", day: now, events: visibleEvents),
-            section(title: "Tomorrow's Events", day: tomorrow, events: visibleEvents)
+            section(title: "Today's Events", day: now, events: visibleEvents, roomConfig: roomConfig),
+            section(title: "Tomorrow's Events", day: tomorrow, events: visibleEvents, roomConfig: roomConfig)
         ].compactMap { section in
             section.rows.isEmpty ? nil : section
         }
@@ -329,24 +424,31 @@ public struct CalendarMenuPresenter {
         return "\(title.prefix(menuBarTitleLimit - 3))..."
     }
 
-    private func section(title: String, day: Date, events: [CalendarEventSnapshot]) -> CalendarMenuSection {
+    private func section(title: String, day: Date, events: [CalendarEventSnapshot], roomConfig: MeetingRoomConfig) -> CalendarMenuSection {
         let rows = events
             .filter { calendar.isDate($0.startDate, inSameDayAs: day) }
             .sorted { $0.startDate < $1.startDate }
-            .map(row)
+            .map { row(for: $0, roomConfig: roomConfig) }
 
         return CalendarMenuSection(title: title, rows: rows)
     }
 
-    private func row(for event: CalendarEventSnapshot) -> CalendarMenuRow {
+    private func row(for event: CalendarEventSnapshot, roomConfig: MeetingRoomConfig) -> CalendarMenuRow {
         let meetURL = GoogleMeetLinkFinder.firstLink(in: [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 })
+        let roomPresentation = MeetingRoomResolver.resolve(
+            attendees: event.attendees,
+            location: event.location,
+            config: roomConfig
+        )
 
         return CalendarMenuRow(
             eventID: event.id,
             title: event.title,
             timeText: event.isAllDay ? "All-day" : timeFormatter.string(from: event.startDate),
             hasMeetLink: meetURL != nil,
-            meetURL: meetURL
+            meetURL: meetURL,
+            attendees: roomPresentation.attendees,
+            roomName: roomPresentation.roomName
         )
     }
 }

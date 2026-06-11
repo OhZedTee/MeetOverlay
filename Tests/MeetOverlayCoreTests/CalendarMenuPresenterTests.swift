@@ -149,13 +149,54 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections[0].rows.map(\.title), ["Finished", "Upcoming"])
     }
 
+    func testRowsCarryAttendeesWithRoomResolutionDisabledByDefault() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 18, minute: 0, calendar: calendar),
+            attendees: ["Alice", "MTL-5F-Boardroom"]
+        )
+
+        let sections = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(now: now, events: [event])
+
+        XCTAssertEqual(sections[0].rows[0].attendees, ["Alice", "MTL-5F-Boardroom"])
+        XCTAssertNil(sections[0].rows[0].roomName)
+    }
+
+    func testRowsResolveRoomWhenConfigEnabled() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 18, minute: 0, calendar: calendar),
+            attendees: ["Alice", "MTL-5F-Boardroom"]
+        )
+
+        let sections = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(
+                now: now,
+                events: [event],
+                roomConfig: MeetingRoomConfig(isEnabled: true, isRoomInAttendees: true, pattern: "MTL-*")
+            )
+
+        XCTAssertEqual(sections[0].rows[0].roomName, "MTL-5F-Boardroom")
+        XCTAssertEqual(sections[0].rows[0].attendees, ["Alice"])
+    }
+
     private func makeEvent(
         id: String,
         title: String,
         startDate: Date,
         endDate: Date,
         isAllDay: Bool = false,
-        notes: String? = nil
+        notes: String? = nil,
+        attendees: [String] = []
     ) -> CalendarEventSnapshot {
         CalendarEventSnapshot(
             id: id,
@@ -166,7 +207,8 @@ final class CalendarMenuPresenterTests: XCTestCase {
             participationStatus: .accepted,
             url: nil,
             notes: notes,
-            location: nil
+            location: nil,
+            attendees: attendees
         )
     }
 

@@ -70,6 +70,9 @@ private final class PreferencesViewModel: ObservableObject {
     @Published var alertLeadTimeUnit: AlertLeadTimeUnit
     @Published var isSnoozeEnabled: Bool
     @Published var snoozeOptions: [TimeInterval]
+    @Published var isMeetingRoomCalloutEnabled: Bool
+    @Published var isMeetingRoomInAttendees: Bool
+    @Published var meetingRoomPattern: String
     @Published var loginItemStatus: String
     @Published var errorMessage: String?
 
@@ -117,6 +120,9 @@ private final class PreferencesViewModel: ObservableObject {
         self.alertLeadTimeUnit = preferences.alertLeadTimeUnit
         self.isSnoozeEnabled = preferences.isSnoozeEnabled
         self.snoozeOptions = preferences.snoozeOptions.sorted()
+        self.isMeetingRoomCalloutEnabled = preferences.isMeetingRoomCalloutEnabled
+        self.isMeetingRoomInAttendees = preferences.isMeetingRoomInAttendees
+        self.meetingRoomPattern = preferences.meetingRoomPattern
         self.launchAtLogin = loginItemController.isEnabled
         self.loginItemStatus = loginItemController.statusText
         self.preferencesStore = preferencesStore
@@ -165,6 +171,21 @@ private final class PreferencesViewModel: ObservableObject {
         savePreferences()
     }
 
+    func setMeetingRoomCalloutEnabled(_ enabled: Bool) {
+        isMeetingRoomCalloutEnabled = enabled
+        savePreferences()
+    }
+
+    func setMeetingRoomInAttendees(_ inAttendees: Bool) {
+        isMeetingRoomInAttendees = inAttendees
+        savePreferences()
+    }
+
+    func setMeetingRoomPattern(_ pattern: String) {
+        meetingRoomPattern = pattern
+        savePreferences()
+    }
+
     func setLaunchAtLogin(_ isEnabled: Bool) {
         do {
             try loginItemController.setEnabled(isEnabled)
@@ -209,7 +230,10 @@ private final class PreferencesViewModel: ObservableObject {
             alertLeadTime: alertLeadTime,
             alertLeadTimeUnit: alertLeadTimeUnit,
             isSnoozeEnabled: isSnoozeEnabled,
-            snoozeOptions: snoozeOptions
+            snoozeOptions: snoozeOptions,
+            isMeetingRoomCalloutEnabled: isMeetingRoomCalloutEnabled,
+            isMeetingRoomInAttendees: isMeetingRoomInAttendees,
+            meetingRoomPattern: meetingRoomPattern
         )
 
         preferencesStore.save(preferences)
@@ -233,7 +257,10 @@ private struct SettingsView: View {
                 hidesFinishedEventsBinding: hidesFinishedEventsBinding,
                 alertLeadTimeValueBinding: alertLeadTimeValueBinding,
                 alertLeadTimeUnitBinding: alertLeadTimeUnitBinding,
-                isSnoozeEnabledBinding: isSnoozeEnabledBinding
+                isSnoozeEnabledBinding: isSnoozeEnabledBinding,
+                meetingRoomCalloutBinding: meetingRoomCalloutBinding,
+                meetingRoomInAttendeesBinding: meetingRoomInAttendeesBinding,
+                meetingRoomPatternBinding: meetingRoomPatternBinding
             )
             .tabItem {
                 Label("General", systemImage: "gearshape")
@@ -291,6 +318,27 @@ private struct SettingsView: View {
             set: { viewModel.setSnoozeEnabled($0) }
         )
     }
+
+    private var meetingRoomCalloutBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isMeetingRoomCalloutEnabled },
+            set: { viewModel.setMeetingRoomCalloutEnabled($0) }
+        )
+    }
+
+    private var meetingRoomInAttendeesBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isMeetingRoomInAttendees },
+            set: { viewModel.setMeetingRoomInAttendees($0) }
+        )
+    }
+
+    private var meetingRoomPatternBinding: Binding<String> {
+        Binding(
+            get: { viewModel.meetingRoomPattern },
+            set: { viewModel.setMeetingRoomPattern($0) }
+        )
+    }
 }
 
 private struct GeneralSettingsView: View {
@@ -301,6 +349,9 @@ private struct GeneralSettingsView: View {
     let alertLeadTimeValueBinding: Binding<Double>
     let alertLeadTimeUnitBinding: Binding<AlertLeadTimeUnit>
     let isSnoozeEnabledBinding: Binding<Bool>
+    let meetingRoomCalloutBinding: Binding<Bool>
+    let meetingRoomInAttendeesBinding: Binding<Bool>
+    let meetingRoomPatternBinding: Binding<String>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -358,6 +409,37 @@ private struct GeneralSettingsView: View {
                     if viewModel.isSnoozeEnabled && viewModel.isOverlayEnabled {
                         SnoozeOptionsEditor(viewModel: viewModel)
                             .padding(.top, 2)
+                    }
+                }
+            }
+
+            SettingsCard(
+                systemImage: "door.left.hand.open",
+                title: "Meeting Rooms",
+                description: "Call out the booked room on reminders and in the menu."
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Call out meeting room", isOn: meetingRoomCalloutBinding)
+
+                    if viewModel.isMeetingRoomCalloutEnabled {
+                        Toggle("Room appears in the attendee list", isOn: meetingRoomInAttendeesBinding)
+
+                        if viewModel.isMeetingRoomInAttendees {
+                            HStack(spacing: 8) {
+                                Text("Room name pattern")
+                                TextField("e.g. MTL-*", text: meetingRoomPatternBinding)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 180)
+                            }
+
+                            Text("* matches any characters, ? matches one. The first matching attendee is shown as the room.")
+                                .font(MeetOverlayTheme.Typography.helper)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("The event's location is used as the room name.")
+                                .font(MeetOverlayTheme.Typography.helper)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

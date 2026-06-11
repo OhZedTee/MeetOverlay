@@ -160,6 +160,30 @@ final class MeetingAlertSelectorTests: XCTestCase {
         XCTAssertEqual(selectedMeeting?.eventID, "event-1")
     }
 
+    // MARK: - Attendees and location passthrough
+
+    func testPassesAttendeesAndLocationThroughToJoinableMeeting() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = CalendarEventSnapshot(
+            id: "event-1",
+            title: "Planning",
+            startDate: now.addingTimeInterval(60),
+            endDate: now.addingTimeInterval(3_600),
+            isAllDay: false,
+            participationStatus: .accepted,
+            url: nil,
+            notes: "https://meet.google.com/abc-defg-hij",
+            location: "MTL-5F-Boardroom",
+            attendees: ["Alice", "MTL-5F-Boardroom", "Bob"]
+        )
+
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: [])
+
+        XCTAssertEqual(selectedMeeting?.attendees, ["Alice", "MTL-5F-Boardroom", "Bob"])
+        XCTAssertEqual(selectedMeeting?.location, "MTL-5F-Boardroom")
+    }
+
     private func makeEvent(
         id: String,
         title: String,

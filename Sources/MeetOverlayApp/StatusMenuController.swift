@@ -79,7 +79,10 @@ final class StatusMenuController: NSObject {
                 accessibilityDescription: row.hasMeetLink ? "Google Meet link" : "Calendar event"
             )
 
-            if let meetURL = row.meetURL {
+            if let submenu = detailSubmenu(for: row) {
+                // A submenu suppresses the item's own click action, so Join moves inside it.
+                item.submenu = submenu
+            } else if let meetURL = row.meetURL {
                 item.action = #selector(openMeetLink)
                 item.target = self
                 item.representedObject = meetURL
@@ -89,6 +92,49 @@ final class StatusMenuController: NSObject {
 
             menu.addItem(item)
         }
+    }
+
+    private func detailSubmenu(for row: CalendarMenuRow) -> NSMenu? {
+        guard !row.attendees.isEmpty || row.roomName != nil else {
+            return nil
+        }
+
+        let submenu = NSMenu()
+
+        if let meetURL = row.meetURL {
+            let joinItem = NSMenuItem(title: "Join Meeting", action: #selector(openMeetLink), keyEquivalent: "")
+            joinItem.target = self
+            joinItem.representedObject = meetURL
+            joinItem.image = NSImage(systemSymbolName: "video.fill", accessibilityDescription: "Google Meet link")
+            submenu.addItem(joinItem)
+            submenu.addItem(.separator())
+        }
+
+        if let roomName = row.roomName {
+            let roomItem = NSMenuItem(title: roomName, action: nil, keyEquivalent: "")
+            roomItem.image = NSImage(systemSymbolName: "door.left.hand.open", accessibilityDescription: "Meeting room")
+            submenu.addItem(roomItem)
+            submenu.addItem(.separator())
+        }
+
+        if !row.attendees.isEmpty {
+            let headerItem = NSMenuItem(
+                title: "\(row.attendees.count) \(row.attendees.count == 1 ? "Attendee" : "Attendees")",
+                action: nil,
+                keyEquivalent: ""
+            )
+            headerItem.isEnabled = false
+            submenu.addItem(headerItem)
+
+            for attendee in row.attendees {
+                let attendeeItem = NSMenuItem(title: attendee, action: nil, keyEquivalent: "")
+                attendeeItem.image = NSImage(systemSymbolName: "person", accessibilityDescription: nil)
+                attendeeItem.indentationLevel = 1
+                submenu.addItem(attendeeItem)
+            }
+        }
+
+        return submenu
     }
 
     @objc private func openPreferences() {
