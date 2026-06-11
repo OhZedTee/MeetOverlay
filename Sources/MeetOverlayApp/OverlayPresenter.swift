@@ -190,7 +190,7 @@ private struct MeetingOverlayView: View {
 
                 HStack(spacing: 14) {
                     Button(action: onJoin) {
-                        Text("Join Meeting")
+                        Text("Join \(meeting.platform.displayName)")
                             .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
                             .padding(.horizontal, 34)
                             .padding(.vertical, 18)
