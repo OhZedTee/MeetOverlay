@@ -110,7 +110,10 @@ final class NotificationPresenter: NSObject {
 
         guard actionID == NotificationIdentifier.joinAction || actionID == UNNotificationDefaultActionIdentifier,
               let urlString,
-              let url = URL(string: urlString) else {
+              let url = URL(string: urlString),
+              VideoCallLinkFinder.platform(for: url) != nil else {
+            // The URL round-trips through notification userInfo, so re-validate
+            // the host allowlist at the point of opening, not just at posting.
             return
         }
 

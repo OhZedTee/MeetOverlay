@@ -19,9 +19,23 @@ public enum AlertLeadTimeUnit: String, Codable, CaseIterable, Equatable {
     }
 }
 
+/// Bounds for user-entered reminder durations (alert lead time, snooze options).
+/// Values outside the range — including non-finite ones — clamp into it, both at
+/// the settings boundary and again before any Int conversion, since an absurd
+/// persisted value would otherwise trap and crash-loop the app.
+public enum ReminderTimeLimits {
+    public static let minimum: TimeInterval = 1
+    public static let maximum: TimeInterval = 86_400
+
+    public static func clamped(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite else { return minimum }
+        return min(max(value, minimum), maximum)
+    }
+}
+
 public enum SnoozeDurationFormatter {
     public static func label(_ duration: TimeInterval) -> String {
-        let secs = Int(duration)
+        let secs = Int(ReminderTimeLimits.clamped(duration))
         if secs >= 60, secs % 60 == 0 {
             let mins = secs / 60
             return "\(mins) \(mins == 1 ? "minute" : "minutes")"
@@ -36,7 +50,7 @@ public enum SnoozeNotificationAction {
     public static let identifierPrefix = "SNOOZE_ACTION:"
 
     public static func identifier(for duration: TimeInterval) -> String {
-        "\(identifierPrefix)\(Int(duration.rounded()))"
+        "\(identifierPrefix)\(Int(ReminderTimeLimits.clamped(duration).rounded()))"
     }
 
     public static func duration(fromIdentifier identifier: String) -> TimeInterval? {
