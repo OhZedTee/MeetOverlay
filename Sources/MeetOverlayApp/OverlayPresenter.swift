@@ -148,6 +148,10 @@ private struct MeetingOverlayView: View {
                 HStack(spacing: 14) {
                     Label(timeRangeText, systemImage: "clock")
 
+                    if let durationText = MeetingDurationFormatter.text(startDate: meeting.startDate, endDate: meeting.endDate) {
+                        Label(durationText, systemImage: "hourglass")
+                    }
+
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(MeetingCountdownFormatter.text(now: context.date, startDate: meeting.startDate))
                     }

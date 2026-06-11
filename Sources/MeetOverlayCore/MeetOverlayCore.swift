@@ -390,6 +390,7 @@ public struct CalendarMenuRow: Equatable {
     public let eventID: String
     public let title: String
     public let timeText: String
+    public let durationText: String?
     public let hasMeetLink: Bool
     public let meetURL: URL?
     public let platform: VideoCallPlatform?
@@ -485,6 +486,7 @@ public struct CalendarMenuPresenter {
             eventID: event.id,
             title: event.title,
             timeText: event.isAllDay ? "All-day" : timeFormatter.string(from: event.startDate),
+            durationText: event.isAllDay ? nil : MeetingDurationFormatter.text(startDate: event.startDate, endDate: event.endDate),
             hasMeetLink: link != nil,
             meetURL: link?.url,
             platform: link?.platform,
@@ -519,6 +521,26 @@ public enum MeetingCountdownFormatter {
 
         let minutes = Int(ceil(Double(seconds) / 60))
         return "Starts in \(minutes) \(minutes == 1 ? "minute" : "minutes")"
+    }
+}
+
+public enum MeetingDurationFormatter {
+    public static func text(startDate: Date, endDate: Date) -> String? {
+        let totalMinutes = Int((endDate.timeIntervalSince(startDate) / 60).rounded())
+        guard totalMinutes > 0 else { return nil }
+
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+
+        if hours == 0 {
+            return "\(minutes) min"
+        }
+
+        if minutes == 0 {
+            return "\(hours)h"
+        }
+
+        return "\(hours)h \(minutes)m"
     }
 }
 
