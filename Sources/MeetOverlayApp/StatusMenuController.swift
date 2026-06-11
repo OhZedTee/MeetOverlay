@@ -72,7 +72,8 @@ final class StatusMenuController: NSObject {
         menu.addItem(headerItem)
 
         for row in section.rows {
-            let title = "\(row.timeText)  \(row.title)"
+            let timePart = row.durationText.map { "\(row.timeText) · \($0)" } ?? row.timeText
+            let title = "\(timePart)  \(row.title)"
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.image = NSImage(
                 systemSymbolName: row.hasMeetLink ? "video.fill" : "calendar",

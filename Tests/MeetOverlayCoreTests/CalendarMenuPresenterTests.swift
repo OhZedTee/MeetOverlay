@@ -26,14 +26,32 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections.map(\.title), ["Today's Events", "Tomorrow's Events"])
         XCTAssertEqual(sections[0].rows[0].title, "Planning")
         XCTAssertEqual(sections[0].rows[0].timeText, "17:00")
+        XCTAssertEqual(sections[0].rows[0].durationText, "1h")
         XCTAssertTrue(sections[0].rows[0].hasMeetLink)
         XCTAssertEqual(sections[0].rows[0].meetURL?.absoluteString, "https://meet.google.com/abc-defg-hij")
         XCTAssertEqual(sections[0].rows[0].platform, .googleMeet)
         XCTAssertEqual(sections[1].rows[0].title, "Admin day")
         XCTAssertEqual(sections[1].rows[0].timeText, "All-day")
+        XCTAssertNil(sections[1].rows[0].durationText, "All-day events show no duration")
         XCTAssertFalse(sections[1].rows[0].hasMeetLink)
         XCTAssertNil(sections[1].rows[0].meetURL)
         XCTAssertNil(sections[1].rows[0].platform)
+    }
+
+    func testRowDurationCoversPartialHours() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Sprint planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 18, minute: 30, calendar: calendar)
+        )
+
+        let sections = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(now: now, events: [event])
+
+        XCTAssertEqual(sections[0].rows[0].durationText, "1h 30m")
     }
 
     func testRowsDetectNonMeetPlatforms() throws {
