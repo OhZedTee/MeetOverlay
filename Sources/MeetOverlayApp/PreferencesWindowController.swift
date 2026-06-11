@@ -66,6 +66,10 @@ private final class PreferencesViewModel: ObservableObject {
     @Published var isOverlayEnabled: Bool
     @Published var hidesFinishedEvents: Bool
     @Published var launchAtLogin: Bool
+    @Published var alertLeadTime: TimeInterval
+    @Published var alertLeadTimeUnit: AlertLeadTimeUnit
+    @Published var isSnoozeEnabled: Bool
+    @Published var snoozeOptions: [TimeInterval]
     @Published var loginItemStatus: String
     @Published var errorMessage: String?
 
@@ -109,6 +113,10 @@ private final class PreferencesViewModel: ObservableObject {
         self.selectedCalendarIDs = preferences.selectedCalendarIDs
         self.isOverlayEnabled = preferences.isOverlayEnabled
         self.hidesFinishedEvents = preferences.hidesFinishedEvents
+        self.alertLeadTime = preferences.alertLeadTime
+        self.alertLeadTimeUnit = preferences.alertLeadTimeUnit
+        self.isSnoozeEnabled = preferences.isSnoozeEnabled
+        self.snoozeOptions = preferences.snoozeOptions.sorted()
         self.launchAtLogin = loginItemController.isEnabled
         self.loginItemStatus = loginItemController.statusText
         self.preferencesStore = preferencesStore
@@ -127,6 +135,33 @@ private final class PreferencesViewModel: ObservableObject {
 
     func setHidesFinishedEvents(_ isEnabled: Bool) {
         hidesFinishedEvents = isEnabled
+        savePreferences()
+    }
+
+    func setAlertLeadTimeDisplayValue(_ value: Double) {
+        alertLeadTime = alertLeadTimeUnit.toSeconds(max(1, value))
+        savePreferences()
+    }
+
+    func setAlertLeadTimeUnit(_ unit: AlertLeadTimeUnit) {
+        alertLeadTimeUnit = unit
+        savePreferences()
+    }
+
+    func setSnoozeEnabled(_ enabled: Bool) {
+        isSnoozeEnabled = enabled
+        savePreferences()
+    }
+
+    func addSnoozeOption(_ duration: TimeInterval) {
+        guard duration > 0, !snoozeOptions.contains(duration) else { return }
+        snoozeOptions.append(duration)
+        snoozeOptions.sort()
+        savePreferences()
+    }
+
+    func removeSnoozeOption(_ duration: TimeInterval) {
+        snoozeOptions.removeAll { $0 == duration }
         savePreferences()
     }
 
@@ -170,7 +205,11 @@ private final class PreferencesViewModel: ObservableObject {
             selectedCalendarIDs: selectedCalendarIDs,
             isOverlayEnabled: isOverlayEnabled,
             launchAtLogin: launchAtLogin,
-            hidesFinishedEvents: hidesFinishedEvents
+            hidesFinishedEvents: hidesFinishedEvents,
+            alertLeadTime: alertLeadTime,
+            alertLeadTimeUnit: alertLeadTimeUnit,
+            isSnoozeEnabled: isSnoozeEnabled,
+            snoozeOptions: snoozeOptions
         )
 
         preferencesStore.save(preferences)
@@ -191,7 +230,10 @@ private struct SettingsView: View {
                 viewModel: viewModel,
                 launchAtLoginBinding: launchAtLoginBinding,
                 overlayBinding: overlayBinding,
-                hidesFinishedEventsBinding: hidesFinishedEventsBinding
+                hidesFinishedEventsBinding: hidesFinishedEventsBinding,
+                alertLeadTimeValueBinding: alertLeadTimeValueBinding,
+                alertLeadTimeUnitBinding: alertLeadTimeUnitBinding,
+                isSnoozeEnabledBinding: isSnoozeEnabledBinding
             )
             .tabItem {
                 Label("General", systemImage: "gearshape")
@@ -228,6 +270,27 @@ private struct SettingsView: View {
             set: { viewModel.setLaunchAtLogin($0) }
         )
     }
+
+    private var alertLeadTimeValueBinding: Binding<Double> {
+        Binding(
+            get: { viewModel.alertLeadTimeUnit.fromSeconds(viewModel.alertLeadTime) },
+            set: { viewModel.setAlertLeadTimeDisplayValue($0) }
+        )
+    }
+
+    private var alertLeadTimeUnitBinding: Binding<AlertLeadTimeUnit> {
+        Binding(
+            get: { viewModel.alertLeadTimeUnit },
+            set: { viewModel.setAlertLeadTimeUnit($0) }
+        )
+    }
+
+    private var isSnoozeEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isSnoozeEnabled },
+            set: { viewModel.setSnoozeEnabled($0) }
+        )
+    }
 }
 
 private struct GeneralSettingsView: View {
@@ -235,6 +298,9 @@ private struct GeneralSettingsView: View {
     let launchAtLoginBinding: Binding<Bool>
     let overlayBinding: Binding<Bool>
     let hidesFinishedEventsBinding: Binding<Bool>
+    let alertLeadTimeValueBinding: Binding<Double>
+    let alertLeadTimeUnitBinding: Binding<AlertLeadTimeUnit>
+    let isSnoozeEnabledBinding: Binding<Bool>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -264,7 +330,36 @@ private struct GeneralSettingsView: View {
                 title: "Reminders",
                 description: "Fullscreen reminders appear only for joinable Google Meet events."
             ) {
-                Toggle("Show fullscreen reminders", isOn: overlayBinding)
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Show fullscreen reminders", isOn: overlayBinding)
+
+                    HStack(spacing: 8) {
+                        Text("Alert me")
+                            .foregroundStyle(viewModel.isOverlayEnabled ? .primary : .secondary)
+                        TextField("", value: alertLeadTimeValueBinding, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                        Picker("", selection: alertLeadTimeUnitBinding) {
+                            Text("minutes").tag(AlertLeadTimeUnit.minutes)
+                            Text("seconds").tag(AlertLeadTimeUnit.seconds)
+                        }
+                        .pickerStyle(.menu)
+                        .fixedSize()
+                        Text("before meeting")
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(!viewModel.isOverlayEnabled)
+
+                    Divider()
+
+                    Toggle("Enable snooze", isOn: isSnoozeEnabledBinding)
+                        .disabled(!viewModel.isOverlayEnabled)
+
+                    if viewModel.isSnoozeEnabled && viewModel.isOverlayEnabled {
+                        SnoozeOptionsEditor(viewModel: viewModel)
+                            .padding(.top, 2)
+                    }
+                }
             }
 
             SettingsCard(
@@ -386,6 +481,95 @@ private struct SettingsCard<Content: View>: View {
             RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.card)
                 .stroke(MeetOverlayTheme.Palette.border, lineWidth: 1)
         )
+    }
+}
+
+private struct SnoozeOptionsEditor: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @State private var newValue: Int = 5
+    @State private var newUnit: AlertLeadTimeUnit = .minutes
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Snooze options")
+                .font(MeetOverlayTheme.Typography.helper.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 0) {
+                ForEach(viewModel.snoozeOptions, id: \.self) { duration in
+                    HStack {
+                        Text(snoozeLabel(duration))
+                            .font(.body)
+                        Spacer()
+                        Button {
+                            viewModel.removeSnoozeOption(duration)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(MeetOverlayTheme.Palette.warning)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+
+                    if duration != viewModel.snoozeOptions.last {
+                        Divider().padding(.horizontal, 10)
+                    }
+                }
+
+                if viewModel.snoozeOptions.isEmpty {
+                    Text("No snooze options — add one below.")
+                        .font(MeetOverlayTheme.Typography.helper)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                }
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    TextField("", value: $newValue, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 56)
+                    Picker("", selection: $newUnit) {
+                        Text("minutes").tag(AlertLeadTimeUnit.minutes)
+                        Text("seconds").tag(AlertLeadTimeUnit.seconds)
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Spacer()
+                    Button {
+                        let duration = newUnit.toSeconds(Double(max(1, newValue)))
+                        viewModel.addSnoozeOption(duration)
+                    } label: {
+                        Label("Add", systemImage: "plus.circle.fill")
+                            .font(MeetOverlayTheme.Typography.helper.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(MeetOverlayTheme.Palette.accent)
+                    .disabled(newValue <= 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.inset)
+                    .fill(MeetOverlayTheme.Palette.insetBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.inset)
+                    .stroke(MeetOverlayTheme.Palette.mutedBorder, lineWidth: 1)
+            )
+        }
+    }
+
+    private func snoozeLabel(_ duration: TimeInterval) -> String {
+        let secs = Int(duration)
+        if secs >= 60, secs % 60 == 0 {
+            let mins = secs / 60
+            return "\(mins) \(mins == 1 ? "minute" : "minutes")"
+        }
+        return "\(secs) \(secs == 1 ? "second" : "seconds")"
     }
 }
 

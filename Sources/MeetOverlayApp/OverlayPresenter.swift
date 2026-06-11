@@ -7,7 +7,7 @@ final class OverlayPresenter {
     private var windows: [NSWindow] = []
     private var notificationSound: NSSound?
 
-    func show(meeting: JoinableMeeting, onJoin: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+    func show(meeting: JoinableMeeting, onJoin: @escaping () -> Void, onDismiss: @escaping () -> Void, onSnooze: @escaping (TimeInterval) -> Void, snoozeOptions: [TimeInterval]) {
         hide()
         playNotificationSound()
 
@@ -29,7 +29,9 @@ final class OverlayPresenter {
                 rootView: MeetingOverlayView(
                     meeting: meeting,
                     onJoin: onJoin,
-                    onDismiss: onDismiss
+                    onDismiss: onDismiss,
+                    onSnooze: onSnooze,
+                    snoozeOptions: snoozeOptions
                 )
             )
 
@@ -83,6 +85,8 @@ private struct MeetingOverlayView: View {
     let meeting: JoinableMeeting
     let onJoin: () -> Void
     let onDismiss: () -> Void
+    let onSnooze: (TimeInterval) -> Void
+    let snoozeOptions: [TimeInterval]
 
     var body: some View {
         ZStack {
@@ -156,6 +160,24 @@ private struct MeetingOverlayView: View {
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
 
+                    if !snoozeOptions.isEmpty {
+                        Menu {
+                            ForEach(snoozeOptions, id: \.self) { duration in
+                                Button("Snooze \(snoozeLabel(duration))") {
+                                    onSnooze(duration)
+                                }
+                            }
+                        } label: {
+                            Text("Snooze")
+                                .font(MeetOverlayTheme.Typography.overlayButton)
+                                .padding(.horizontal, 26)
+                                .padding(.vertical, 18)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+
                     Button(action: onDismiss) {
                         Text("Dismiss for This Meeting")
                             .font(MeetOverlayTheme.Typography.overlayButton)
@@ -168,7 +190,10 @@ private struct MeetingOverlayView: View {
                 }
                 .padding(.top, 14)
 
-                Text("Return joins. Esc dismisses this reminder.")
+                Text(snoozeOptions.isEmpty
+                    ? "Return joins. Esc dismisses."
+                    : "Return joins. Esc dismisses. Snooze re-alerts after the selected delay."
+                )
                     .font(MeetOverlayTheme.Typography.overlayHint)
                     .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
             }
@@ -195,5 +220,14 @@ private struct MeetingOverlayView: View {
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return "\(formatter.string(from: meeting.startDate)) to \(formatter.string(from: meeting.endDate))"
+    }
+
+    private func snoozeLabel(_ duration: TimeInterval) -> String {
+        let secs = Int(duration)
+        if secs >= 60, secs % 60 == 0 {
+            let mins = secs / 60
+            return "\(mins) \(mins == 1 ? "minute" : "minutes")"
+        }
+        return "\(secs) \(secs == 1 ? "second" : "seconds")"
     }
 }

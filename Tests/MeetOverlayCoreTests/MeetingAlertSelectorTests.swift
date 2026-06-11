@@ -94,6 +94,72 @@ final class MeetingAlertSelectorTests: XCTestCase {
         XCTAssertEqual(selectedMeeting?.eventID, "event-1")
     }
 
+    // MARK: - 15-minute lead time boundary
+
+    func testShowsEventAt15MinLeadTime() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: now.addingTimeInterval(15 * 60),
+            now: now
+        )
+
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 15 * 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: [])
+
+        XCTAssertEqual(selectedMeeting?.eventID, "event-1")
+    }
+
+    func testDoesNotShowEventJustOutside15MinWindow() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Later planning",
+            startDate: now.addingTimeInterval(15 * 60 + 1),
+            now: now
+        )
+
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 15 * 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: [])
+
+        XCTAssertNil(selectedMeeting)
+    }
+
+    // MARK: - Snooze re-appear behaviour
+
+    func testSnoozedEventIsHiddenWhenInSuppressedIDs() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: now.addingTimeInterval(5 * 60),
+            now: now
+        )
+
+        // Simulates snooze active: event ID is in the suppressed set
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 15 * 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: ["event-1"])
+
+        XCTAssertNil(selectedMeeting)
+    }
+
+    func testSnoozedEventReappearsAfterSnoozeExpiry() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: now.addingTimeInterval(5 * 60),
+            now: now
+        )
+
+        // Simulates snooze expired: event ID is no longer in the suppressed set
+        let selectedMeeting = MeetingAlertSelector(alertLeadTime: 15 * 60)
+            .meetingToShow(now: now, events: [event], suppressedEventIDs: [])
+
+        XCTAssertEqual(selectedMeeting?.eventID, "event-1")
+    }
+
     private func makeEvent(
         id: String,
         title: String,
