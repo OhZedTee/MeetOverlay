@@ -20,6 +20,10 @@ final class OverlayPresenter {
             )
 
             window.onDismiss = onDismiss
+            // S snoozes by the shortest configured option; nil leaves the key inert.
+            window.onSnoozeKey = snoozeOptions.first.map { duration in
+                { onSnooze(duration) }
+            }
             window.level = .screenSaver
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
             window.backgroundColor = .clear
@@ -65,6 +69,7 @@ final class OverlayPresenter {
 @MainActor
 private final class OverlayWindow: NSWindow {
     var onDismiss: (() -> Void)?
+    var onSnoozeKey: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -76,6 +81,13 @@ private final class OverlayWindow: NSWindow {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
             onDismiss?()
+            return
+        }
+
+        if let onSnoozeKey,
+           event.charactersIgnoringModifiers?.lowercased() == "s",
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            onSnoozeKey()
             return
         }
 
@@ -229,10 +241,7 @@ private struct MeetingOverlayView: View {
                 }
                 .padding(.top, 14)
 
-                Text(snoozeOptions.isEmpty
-                    ? "Return joins. Esc dismisses."
-                    : "Return joins. Esc dismisses. Snooze re-alerts after the selected delay."
-                )
+                Text(hintText)
                     .font(MeetOverlayTheme.Typography.overlayHint)
                     .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
             }
@@ -259,5 +268,13 @@ private struct MeetingOverlayView: View {
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return "\(formatter.string(from: meeting.startDate)) to \(formatter.string(from: meeting.endDate))"
+    }
+
+    private var hintText: String {
+        guard let firstOption = snoozeOptions.first else {
+            return "Return joins. Esc dismisses."
+        }
+
+        return "Return joins. Esc dismisses. S snoozes \(SnoozeDurationFormatter.label(firstOption))."
     }
 }
